@@ -1,5 +1,8 @@
+using System;
+using System.Linq;
 using AuthServer.Host.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.Extensions.DependencyInjection;
 using MsDemo.Shared;
@@ -86,7 +89,28 @@ namespace AuthServer.Host
             var redis = ConnectionMultiplexer.Connect(configuration["Redis:Configuration"]);
             context.Services.AddDataProtection()
                 .PersistKeysToStackExchangeRedis(redis, "MsDemo-DataProtection-Keys");
+
+            context.Services.AddCors(options =>
+            {
+                options.AddPolicy(DefaultCorsPolicyName, builder =>
+                {
+                    builder
+                        .WithOrigins(
+                            configuration["App:CorsOrigins"]
+                                .Split(",", StringSplitOptions.RemoveEmptyEntries)
+                                .Select(o => o.RemovePostFix("/"))
+                                .ToArray()
+                        )
+                        .WithAbpExposedHeaders()
+                        .SetIsOriginAllowedToAllowWildcardSubdomains()
+                        .AllowAnyHeader()
+                        .AllowAnyMethod()
+                        .AllowCredentials();
+                });
+            });
         }
+
+        private const string DefaultCorsPolicyName = "Default";
 
         public override void OnApplicationInitialization(ApplicationInitializationContext context)
         {
@@ -95,6 +119,7 @@ namespace AuthServer.Host
             app.UseCorrelationId();
             app.UseVirtualFiles();
             app.UseRouting();
+            app.UseCors(DefaultCorsPolicyName);
             app.UseAbpRequestLocalization();
             if (MsDemoConsts.IsMultiTenancyEnabled)
             {
